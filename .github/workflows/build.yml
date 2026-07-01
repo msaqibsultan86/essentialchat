@@ -8,16 +8,26 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Unzip the mod
+      - name: Find and unzip the newest mod zip
         run: |
-          ZIP=$(ls *.zip | head -1)
-          echo "Found zip: $ZIP"
-          unzip -o "$ZIP" -d _src
+          # picks the most recently committed .zip, whatever its name
+          # (EssentialChat.zip, EssentialChat (1).zip, EssentialChat[25].zip, etc.)
+          ZIP=$(ls -t *.zip 2>/dev/null | head -1)
+          if [ -z "$ZIP" ]; then
+            echo "No .zip file found in the repo root!"; exit 1
+          fi
+          echo "Using zip: $ZIP"
+          rm -rf _src && mkdir _src
+          unzip -o "$ZIP" -d _src >/dev/null
 
       - name: Find project folder
         id: find
         run: |
-          DIR=$(dirname "$(find _src -name build.gradle | head -1)")
+          GRADLE=$(find _src -name build.gradle | head -1)
+          if [ -z "$GRADLE" ]; then
+            echo "No build.gradle found inside the zip!"; exit 1
+          fi
+          DIR=$(dirname "$GRADLE")
           echo "Project dir: $DIR"
           echo "dir=$DIR" >> "$GITHUB_OUTPUT"
 
@@ -37,7 +47,7 @@ jobs:
           cd "${{ steps.find.outputs.dir }}"
           gradle build --no-daemon
 
-      - name: Upload jar
+      - name: Upload built jar
         uses: actions/upload-artifact@v4
         with:
           name: built-mod
