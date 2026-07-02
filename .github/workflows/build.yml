@@ -8,21 +8,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0        # need full history to sort zips by upload time
+          fetch-depth: 0
 
-      - name: Pick the most recently uploaded zip
+      - name: Pick the most recently committed zip
         run: |
           NEWEST=""
           NEWEST_TIME=0
+          # list all zips tracked by git
           for f in $(git ls-files '*.zip'); do
-            T=$(git log -1 --format=%ct -- "$f")
-            if [ "$T" -gt "$NEWEST_TIME" ]; then
-              NEWEST_TIME=$T
+            T=$(git log -1 --format=%ct -- "$f" 2>/dev/null)
+            # default to 0 if git gave nothing
+            if [ -z "$T" ]; then T=0; fi
+            if [ "$T" -ge "$NEWEST_TIME" ]; then
+              NEWEST_TIME="$T"
               NEWEST="$f"
             fi
           done
+          # fallback: if still nothing, just grab any zip on disk
           if [ -z "$NEWEST" ]; then
-            echo "No .zip found in repo!"; exit 1
+            NEWEST=$(ls -1 *.zip 2>/dev/null | head -1)
+          fi
+          if [ -z "$NEWEST" ]; then
+            echo "No .zip found in repo!"
+            ls -la
+            exit 1
           fi
           echo "Building newest zip: $NEWEST"
           echo "ZIP=$NEWEST" >> "$GITHUB_ENV"
@@ -44,7 +53,8 @@ jobs:
 
       - name: Build
         run: |
-          DIR=$(dirname "$(find _build -name build.gradle | head -1)")
+          GRADLE_FILE=$(find _build -name build.gradle | head -1)
+          DIR=$(dirname "$GRADLE_FILE")
           echo "Project dir: $DIR"
           cd "$DIR"
           gradle build --no-daemon
